@@ -1,9 +1,12 @@
 import requests
+import os
+from store_sql import init_db, store_weather
+from generate_poem import generate_poem
 
 # Base API URL
 BASE_URL = "https://api.open-meteo.com/v1/forecast"
 
-# Your 3 locations
+# Locations
 locations = {
     "Birth (Delhi)": (28.6139, 77.2090),
     "Previous (Kathmandu)": (27.7172, 85.3240),
@@ -12,9 +15,6 @@ locations = {
 
 
 def build_weather_url(lat, lon):
-    """
-    Build the Open-Meteo API URL
-    """
     return (
         f"{BASE_URL}?"
         f"latitude={lat}&longitude={lon}&"
@@ -24,81 +24,31 @@ def build_weather_url(lat, lon):
 
 
 def fetch_weather():
-    """
-    Fetch weather data and return cleaned results
-    """
     weather_data = []
 
     for name, (lat, lon) in locations.items():
         url = build_weather_url(lat, lon)
 
         response = requests.get(url, timeout=30)
-        response.raise_for_status()  # good practice like lecturer
+        response.raise_for_status()
 
         data = response.json()
 
-        # Extract required values
-        temperature = data["daily"]["temperature_2m_max"][0]
-        wind_speed = data["daily"]["windspeed_10m_max"][0]
-        precipitation = data["daily"]["precipitation_sum"][0]
-        date = data["daily"]["time"][0]
-
-        # Store clean dictionary
         weather_data.append({
             "location": name,
-            "temperature": temperature,
-            "wind_speed": wind_speed,
-            "precipitation": precipitation,
-            "date": date
+            "temperature": data["daily"]["temperature_2m_max"][0],
+            "wind_speed": data["daily"]["windspeed_10m_max"][0],
+            "precipitation": data["daily"]["precipitation_sum"][0],
+            "date": data["daily"]["time"][0]
         })
 
     return weather_data
 
 
-# Run file directly (for testing)
-if __name__ == "__main__":
-    data = fetch_weather()
+def save_html(poem):
+    os.makedirs("docs", exist_ok=True)
 
-    print("Weather Data:\n")
-    for item in data:
-        print(item)
-
-    from store_sql import init_db, store_weather
-
-if __name__ == "__main__":
-    data = fetch_weather()
-
-    conn = init_db()
-    count = store_weather(conn, data)
-
-    print(f"Inserted {count} rows")
-    conn.close()
-
-    #connectpoemtofetch
-    from store_sql import init_db, store_weather
-from generate_poem import generate_poem
-
-if __name__ == "__main__":
-    data = fetch_weather()
-
-    conn = init_db()
-    count = store_weather(conn, data)
-
-    poem = generate_poem(data)
-
-    print(f"Inserted {count} rows\n")
-    print("Poem:\n")
-    print(poem)
-
-    conn.close()
-
-    #add html 
-    import os
-
-os.makedirs("docs", exist_ok=True)
-
-with open("docs/index.html", "w", encoding="utf-8") as f:
-    f.write(f"""
+    html = f"""
     <html>
     <head>
         <title>Weather Poem</title>
@@ -108,4 +58,32 @@ with open("docs/index.html", "w", encoding="utf-8") as f:
         <pre>{poem}</pre>
     </body>
     </html>
-    """)
+    """
+
+    with open("docs/index.html", "w", encoding="utf-8") as f:
+        f.write(html)
+
+
+if __name__ == "__main__":
+    # Fetch
+    data = fetch_weather()
+
+    print("Weather Data:\n")
+    for item in data:
+        print(item)
+
+    # Store in DB
+    conn = init_db()
+    count = store_weather(conn, data)
+
+    # Generate poem
+    poem = generate_poem(data)
+
+    print(f"\nInserted {count} rows")
+    print("\nPoem:\n")
+    print(poem)
+
+    # Save HTML
+    save_html(poem)
+
+    conn.close()
